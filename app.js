@@ -8,12 +8,13 @@ app.use(express.json());
 
 // Test route
 app.get("/", (req, res) => {
-  res.send("Backend is running 🚀");
+  res.send("Backend is running");
 });
 
 // Import routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/user"));
+app.use("/api/portfolio", require("./routes/portfolio"));
 
 const PORT = 5000;
 
