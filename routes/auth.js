@@ -7,6 +7,7 @@ const router = express.Router();
 const pool = require("../config/db");
 const sendEmail = require("../utils/sendEmail");
 const auth = require("../middleware/auth");
+const ensureLoginEventsSchema = require("../utils/ensureLoginEventsSchema");
 
 const isNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0;
@@ -185,6 +186,13 @@ router.post("/verify-otp", async (req, res) => {
       "UPDATE users SET otp=NULL, otp_expiry=NULL, is_verified=TRUE WHERE id=?",
       [user.id]
     );
+
+    try {
+      await ensureLoginEventsSchema(pool);
+      await pool.query("INSERT INTO login_events (user_id) VALUES (?)", [user.id]);
+    } catch (e) {
+      console.error("Failed to record login event:", e.message);
+    }
 
     const token = signToken(user.id);
 
