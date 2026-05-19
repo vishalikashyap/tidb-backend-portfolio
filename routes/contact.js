@@ -1,9 +1,19 @@
 const express = require("express");
 const nodemailer = require("nodemailer");
+const dns = require("dns").promises;
 
 const { renderEmail, escapeHtml, BRAND } = require("../utils/emailTemplate");
 
 const router = express.Router();
+
+const SMTP_HOST = "smtp.gmail.com";
+let cachedSmtpIp = null;
+const resolveSmtpIpv4 = async () => {
+  if (cachedSmtpIp) return cachedSmtpIp;
+  const { address } = await dns.lookup(SMTP_HOST, { family: 4 });
+  cachedSmtpIp = address;
+  return address;
+};
 
 const isNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0;
@@ -86,12 +96,15 @@ router.post("/", async (req, res) => {
       ? subject.trim().slice(0, 200)
       : "New contact form submission";
 
+    const smtpIp = await resolveSmtpIpv4();
+
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
+      host: smtpIp,
       port: 465,
       secure: true,
       auth: { user, pass },
       family: 4,
+      tls: { servername: SMTP_HOST },
     });
 
     const html = renderEmail({

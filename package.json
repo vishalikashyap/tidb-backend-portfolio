@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node app.js",
+    "start": "node --dns-result-order=ipv4first app.js",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "test": "echo \"Error: no test specified\" && exit 1"

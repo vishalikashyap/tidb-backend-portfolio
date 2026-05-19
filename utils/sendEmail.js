@@ -1,5 +1,16 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns").promises;
 const { renderEmail, BRAND } = require("./emailTemplate");
+
+const SMTP_HOST = "smtp.gmail.com";
+let cachedSmtpIp = null;
+
+const resolveSmtpIpv4 = async () => {
+  if (cachedSmtpIp) return cachedSmtpIp;
+  const { address } = await dns.lookup(SMTP_HOST, { family: 4 });
+  cachedSmtpIp = address;
+  return address;
+};
 
 const getMailCreds = () => {
   const user = process.env.EMAIL_USER || process.env.MAIL_USER;
@@ -34,12 +45,15 @@ const sendEmail = async (to, otp) => {
     );
   }
 
+  const smtpIp = await resolveSmtpIpv4();
+
   const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
+    host: smtpIp,
     port: 465,
     secure: true,
     auth: { user, pass },
     family: 4,
+    tls: { servername: SMTP_HOST },
   });
 
   const html = renderEmail({
