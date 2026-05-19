@@ -6,6 +6,7 @@ const otpGenerator = require("otp-generator");
 const router = express.Router();
 const pool = require("../config/db");
 const sendEmail = require("../utils/sendEmail");
+const { sendOtpSms } = require("../utils/sendSms");
 const auth = require("../middleware/auth");
 const ensureLoginEventsSchema = require("../utils/ensureLoginEventsSchema");
 
@@ -96,7 +97,7 @@ router.post("/send-otp", async (req, res) => {
         );
       }
     } else if (mobile) {
-      console.log("OTP for mobile:", otp); // replace with SMS later
+      await sendOtpSms(normalizedMobile, otp);
 
       const [rows] = await pool.query("SELECT id FROM users WHERE mobile=?", [
         normalizedMobile,
