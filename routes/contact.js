@@ -1,19 +1,9 @@
 const express = require("express");
-const nodemailer = require("nodemailer");
-const dns = require("dns").promises;
 
 const { renderEmail, escapeHtml, BRAND } = require("../utils/emailTemplate");
+const { sendMail } = require("../utils/mailer");
 
 const router = express.Router();
-
-const SMTP_HOST = "smtp.gmail.com";
-let cachedSmtpIp = null;
-const resolveSmtpIpv4 = async () => {
-  if (cachedSmtpIp) return cachedSmtpIp;
-  const { address } = await dns.lookup(SMTP_HOST, { family: 4 });
-  cachedSmtpIp = address;
-  return address;
-};
 
 const isNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0;
@@ -21,13 +11,6 @@ const isNonEmptyString = (value) =>
 const isEmail = (value) =>
   isNonEmptyString(value) &&
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
-
-const getMailCreds = () => {
-  const user = process.env.EMAIL_USER || process.env.MAIL_USER;
-  const rawPass = process.env.EMAIL_PASS || process.env.MAIL_PASS;
-  const pass = rawPass ? String(rawPass).replace(/\s+/g, "") : rawPass;
-  return { user, pass };
-};
 
 const renderContactBody = ({ name, email, subjectText, message }) => `
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
@@ -83,29 +66,24 @@ router.post("/", async (req, res) => {
       return res.status(413).json({ message: "Message too long" });
     }
 
-    const { user, pass } = getMailCreds();
-    if (!user || !pass) {
-      return res.status(500).json({ message: "Mail not configured" });
+    const inboxFallback =
+      process.env.EMAIL_USER ||
+      process.env.MAIL_USER ||
+      process.env.CONTACT_TO;
+    const to = process.env.CONTACT_TO || inboxFallback;
+    if (!to) {
+      return res.status(500).json({
+        message:
+          "Inbox not configured. Set CONTACT_TO (or EMAIL_USER/MAIL_USER).",
+      });
     }
 
-    const to = process.env.CONTACT_TO || user;
     const cleanName = name.trim();
     const cleanEmail = email.trim();
     const cleanMessage = message.trim();
     const subjectText = isNonEmptyString(subject)
       ? subject.trim().slice(0, 200)
       : "New contact form submission";
-
-    const smtpIp = await resolveSmtpIpv4();
-
-    const transporter = nodemailer.createTransport({
-      host: smtpIp,
-      port: 465,
-      secure: true,
-      auth: { user, pass },
-      family: 4,
-      tls: { servername: SMTP_HOST },
-    });
 
     const html = renderEmail({
       preheader: `${cleanName} sent you a message: ${subjectText}`,
@@ -126,8 +104,8 @@ router.post("/", async (req, res) => {
       `Subject: ${subjectText}\n\n` +
       `Message:\n${cleanMessage}\n`;
 
-    await transporter.sendMail({
-      from: `"${BRAND.name} Contact" <${user}>`,
+    await sendMail({
+      from: `"${BRAND.name} Contact" <${process.env.EMAIL_USER || process.env.MAIL_USER || "onboarding@resend.dev"}>`,
       to,
       replyTo: cleanEmail,
       subject: `[${BRAND.name}] ${subjectText}`,
