@@ -36,12 +36,21 @@ const sendOtpSms = async (mobile, otp) => {
   const to = toE164(mobile);
   if (!to) throw new Error("Invalid mobile number.");
 
-  const client = getClient();
-  await client.messages.create({
-    from,
-    to,
-    body: `Your Portfolio sign-in code is ${otp}. It expires in 5 minutes. Never share this code with anyone.`,
-  });
+  // Add timeout to prevent hanging (Twilio API should respond quickly)
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("SMS send timeout (10s)")), 10000)
+  );
+
+  const sendPromise = (async () => {
+    const client = getClient();
+    return await client.messages.create({
+      from,
+      to,
+      body: `Your Portfolio sign-in code is ${otp}. It expires in 5 minutes. Never share this code with anyone.`,
+    });
+  })();
+
+  return Promise.race([sendPromise, timeoutPromise]);
 };
 
 module.exports = { sendOtpSms, toE164 };

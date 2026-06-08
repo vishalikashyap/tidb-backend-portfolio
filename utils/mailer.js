@@ -60,13 +60,24 @@ const sendViaSmtp = async ({ to, subject, html, text, from, replyTo }) => {
 
   const smtpIp = await resolveSmtpIpv4();
 
+  // Try port 465 first (SSL), then fallback to 587 (TLS) if on Render
+  const isProduction = process.env.NODE_ENV === "production";
+  const port = isProduction ? 587 : 465;
+  const secure = port === 465;
+
+  console.log(
+    `[SMTP] Sending to ${to} via ${smtpIp}:${port} (secure: ${secure})`
+  );
+
   const transporter = nodemailer.createTransport({
     host: smtpIp,
-    port: 465,
-    secure: true,
+    port: port,
+    secure: secure,
     auth: { user, pass },
     family: 4,
-    tls: { servername: SMTP_HOST },
+    ...(port === 587 ? { tls: { servername: SMTP_HOST } } : {}),
+    connectionTimeout: 5000,
+    socketTimeout: 10000,
   });
 
   await transporter.sendMail({
@@ -77,6 +88,8 @@ const sendViaSmtp = async ({ to, subject, html, text, from, replyTo }) => {
     text,
     ...(replyTo ? { replyTo } : {}),
   });
+
+  console.log(`[SMTP] Successfully sent email to ${to}`);
 };
 
 /**
@@ -85,10 +98,36 @@ const sendViaSmtp = async ({ to, subject, html, text, from, replyTo }) => {
  * Gmail SMTP locally for dev.
  */
 const sendMail = async (opts) => {
-  if (getResend()) {
-    return sendViaResend(opts);
-  }
-  return sendViaSmtp(opts);
+  console.log(`[MAILER] Starting email send...`);
+
+  // Add timeout to prevent hanging requests (especially SMTP)
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => {
+      const err = new Error("Email send timeout (10s) - SMTP or API unreachable");
+      console.error(`[MAILER] ✗ ${err.message}`);
+      reject(err);
+    }, 10000)
+  );
+
+  const sendPromise = (async () => {
+    if (getResend()) {
+      console.log(`[MAILER] Using Resend API...`);
+      return await sendViaResend(opts);
+    } else {
+      console.log(`[MAILER] Using SMTP (Gmail)...`);
+      return await sendViaSmtp(opts);
+    }
+  })();
+
+  return Promise.race([sendPromise, timeoutPromise])
+    .then((result) => {
+      console.log(`[MAILER] ✓ Email sent successfully`);
+      return result;
+    })
+    .catch((err) => {
+      console.error(`[MAILER] ✗ Email send failed:`, err.message);
+      throw err;
+    });
 };
 
 module.exports = { sendMail };

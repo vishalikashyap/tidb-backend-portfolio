@@ -19,6 +19,8 @@ const renderOtpBody = (otp) => `
 `;
 
 const sendEmail = async (to, otp) => {
+  console.log(`[MAIL] Preparing to send OTP to ${to}`);
+
   const html = renderEmail({
     preheader: `Your ${BRAND.name} sign-in code is ${otp}. It expires in 5 minutes.`,
     title: "Verify your sign-in",
@@ -32,6 +34,9 @@ const sendEmail = async (to, otp) => {
     `This code expires in 5 minutes. If you didn't request it, you can ignore this email.\n\n` +
     `For your security, never share this code with anyone.`;
 
+  const hasResend = process.env.RESEND_API_KEY ? "Yes" : "No";
+  console.log(`[MAIL] Using Resend: ${hasResend}, Using SMTP: ${hasResend === "No" ? "Yes" : "No"}`);
+
   await sendMail({
     from: `"${BRAND.name}" <${process.env.EMAIL_USER || process.env.MAIL_USER || "onboarding@resend.dev"}>`,
     to,
@@ -39,6 +44,8 @@ const sendEmail = async (to, otp) => {
     text,
     html,
   });
+
+  console.log(`[MAIL] ✓ OTP email prepared and queued to ${to}`);
 };
 
 module.exports = sendEmail;

@@ -77,9 +77,10 @@ router.post("/send-otp", async (req, res) => {
   const includeOtp = String(process.env.OTP_DEBUG).toLowerCase() === "true";
 
   try {
-    if (email) {
-      await sendEmail(email, otp);
+    console.log(`[OTP] Received request for ${email ? "email: " + email : "mobile: " + mobile}`);
 
+    // STEP 1: Save OTP to database FIRST (fast operation)
+    if (email) {
       const [rows] = await pool.query("SELECT id FROM users WHERE email=?", [
         email,
       ]);
@@ -90,15 +91,24 @@ router.post("/send-otp", async (req, res) => {
           expiry,
           email,
         ]);
+        console.log(`[OTP] Updated OTP in DB for existing user: ${email}`);
       } else {
         await pool.query(
           "INSERT INTO users (email, otp, otp_expiry) VALUES (?, ?, ?)",
           [email, otp, expiry]
         );
+        console.log(`[OTP] Created new user with OTP: ${email}`);
       }
-    } else if (mobile) {
-      await sendOtpSms(normalizedMobile, otp);
 
+      // STEP 2: Send email in background (don't await) with timeout
+      console.log(`[OTP] Sending email to ${email}...`);
+      sendEmail(email, otp)
+        .then(() => console.log(`[OTP] ✓ Email sent successfully to ${email}`))
+        .catch((err) => {
+          console.error(`[OTP] ✗ Failed to send email to ${email}:`, err.message);
+          console.error(`[OTP] Error details:`, err);
+        });
+    } else if (mobile) {
       const [rows] = await pool.query("SELECT id FROM users WHERE mobile=?", [
         normalizedMobile,
       ]);
@@ -114,8 +124,16 @@ router.post("/send-otp", async (req, res) => {
           [normalizedMobile, otp, expiry]
         );
       }
+
+      // STEP 2: Send SMS in background (don't await) with timeout
+      sendOtpSms(normalizedMobile, otp)
+        .then(() => console.log(`OTP SMS sent to ${normalizedMobile}`))
+        .catch((err) =>
+          console.error(`Failed to send OTP SMS to ${normalizedMobile}:`, err.message)
+        );
     }
 
+    // Return immediately without waiting for email/SMS
     return res.json({
       message: "OTP sent successfully",
       ...(includeOtp ? { otp } : {}),
