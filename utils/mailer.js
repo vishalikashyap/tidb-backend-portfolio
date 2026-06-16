@@ -58,24 +58,21 @@ const sendViaSmtp = async ({ to, subject, html, text, from, replyTo }) => {
     );
   }
 
-  const smtpIp = await resolveSmtpIpv4();
-
-  // Try port 465 first (SSL), then fallback to 587 (TLS) if on Render
   const isProduction = process.env.NODE_ENV === "production";
   const port = isProduction ? 587 : 465;
   const secure = port === 465;
 
   console.log(
-    `[SMTP] Sending to ${to} via ${smtpIp}:${port} (secure: ${secure})`
+    `[SMTP] Sending to ${to} via ${SMTP_HOST}:${port} (secure: ${secure})`
   );
 
   const transporter = nodemailer.createTransport({
-    host: smtpIp,
+    host: SMTP_HOST,
     port: port,
     secure: secure,
     auth: { user, pass },
     family: 4,
-    ...(port === 587 ? { tls: { servername: SMTP_HOST } } : {}),
+    tls: { servername: SMTP_HOST },
     connectionTimeout: 5000,
     socketTimeout: 10000,
   });
